@@ -6,29 +6,39 @@
   <title>MultiTwitch Viewer</title>
   <script src="https://player.twitch.tv/js/embed/v1.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-4">
-  <div class="max-w-6xl mx-auto">
-    <h1 class="text-4xl font-extrabold text-center mb-8 text-purple-400 drop-shadow">
-      🎮 MultiTwitch Viewer
-    </h1>
+<body class="bg-gray-900 text-white min-h-screen p-4 transition-colors duration-300" id="body">
+  <div class="max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-4xl font-extrabold text-purple-400">🎮 MultiTwitch Viewer</h1>
+      <button id="themeToggle" class="bg-gray-700 hover:bg-purple-600 px-4 py-2 rounded transition">
+        🌓 Thème
+      </button>
+    </div>
 
     <!-- Formulaire -->
-    <form id="streamForm" class="flex flex-col md:flex-row gap-4 mb-8 justify-center items-center">
+    <form id="streamForm" class="flex flex-col md:flex-row gap-4 mb-6">
       <input type="text" id="usernames" placeholder="streamer1, streamer2..."
-        class="w-full md:w-1/2 p-3 rounded bg-gray-800 border border-gray-600 text-white"
-        required />
+        class="w-full md:w-2/3 p-3 rounded bg-gray-800 border border-gray-600" required />
       <button type="submit"
-        class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded font-semibold transition shadow">
+        class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded font-semibold transition">
         ➕ Ajouter les streams
       </button>
     </form>
 
-    <!-- Liste streamers actifs -->
-    <div id="activeUsers" class="flex flex-wrap gap-2 mb-4 justify-center"></div>
+    <!-- Liste des utilisateurs -->
+    <div id="activeUsers" class="flex flex-wrap gap-2 mb-4"></div>
 
-    <!-- Lecteurs -->
+    <!-- Streams -->
     <div id="streamContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"></div>
+
+    <!-- Infos stream -->
+    <div id="streamInfo" class="space-y-2 mb-6"></div>
 
     <!-- Chat -->
     <h2 class="text-2xl font-semibold mb-2">💬 Chat actif</h2>
@@ -41,14 +51,25 @@
     const streamContainer = document.getElementById("streamContainer");
     const chatContainer = document.getElementById("chatContainer");
     const activeUsers = document.getElementById("activeUsers");
+    const streamInfo = document.getElementById("streamInfo");
+    const body = document.getElementById("body");
     const domain = location.hostname;
 
     let currentStreamers = [];
+    const CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"; // Public Twitch GQL client (non secret)
+    const API_URL = "https://gql.twitch.tv/gql";
+
+    // Dark mode
+    document.getElementById("themeToggle").onclick = () => {
+      body.classList.toggle("dark");
+      document.documentElement.classList.toggle("dark");
+    };
 
     function clear() {
       streamContainer.innerHTML = "";
       chatContainer.innerHTML = "";
       activeUsers.innerHTML = "";
+      streamInfo.innerHTML = "";
     }
 
     function createStreamEmbed(username) {
@@ -68,7 +89,7 @@
 
       const btn = document.createElement("button");
       btn.textContent = username;
-      btn.className = "bg-gray-700 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition";
+      btn.className = "bg-gray-700 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm";
       btn.onclick = () => loadChat(username);
       activeUsers.appendChild(btn);
     }
@@ -83,8 +104,8 @@
       chatContainer.appendChild(iframe);
     }
 
-    function saveToLocalStorage(streamers) {
-      localStorage.setItem("multiTwitchUsernames", JSON.stringify(streamers));
+    function saveToLocalStorage(usernames) {
+      localStorage.setItem("multiTwitchUsernames", JSON.stringify(usernames));
     }
 
     function loadFromLocalStorage() {
@@ -92,7 +113,51 @@
       return stored ? JSON.parse(stored) : [];
     }
 
-    form.addEventListener("submit", (e) => {
+    async function fetchStreamInfo(username) {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Client-ID": CLIENT_ID,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify([{
+          operationName: "ChannelShell",
+          variables: { login: username },
+          extensions: {
+            persistedQuery: {
+              version: 1,
+              sha256Hash: "5158439e62a73367807b3d0b1bc6c4981a43fda1e49a52d6e6f09aa5e8c7bfa3"
+            }
+          }
+        }])
+      });
+
+      const json = await res.json();
+      const user = json[0]?.data?.userOrError;
+      if (!user) return null;
+
+      return {
+        name: user.login,
+        displayName: user.displayName,
+        title: user.stream?.title || "🔴 Hors ligne",
+        game: user.stream?.game?.displayName || "Aucun jeu"
+      };
+    }
+
+    async function displayStreamInfo(usernames) {
+      for (let username of usernames) {
+        const info = await fetchStreamInfo(username);
+        if (info) {
+          const div = document.createElement("div");
+          div.className = "bg-gray-800 p-4 rounded border border-gray-700";
+          div.innerHTML = `<strong>${info.displayName}</strong> joue à <span class="text-purple-400">${info.game}</span><br/>
+          <em>${info.title}</em>`;
+          streamInfo.appendChild(div);
+        }
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       clear();
       const usernames = usernamesInput.value
@@ -103,15 +168,16 @@
       saveToLocalStorage(usernames);
       usernames.forEach((username) => createStreamEmbed(username));
       if (usernames.length > 0) loadChat(usernames[0]);
+      await displayStreamInfo(usernames);
     });
 
-    // Chargement initial
-    window.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("DOMContentLoaded", async () => {
       const saved = loadFromLocalStorage();
       if (saved.length > 0) {
         usernamesInput.value = saved.join(", ");
         saved.forEach((username) => createStreamEmbed(username));
         loadChat(saved[0]);
+        await displayStreamInfo(saved);
       }
     });
   </script>
