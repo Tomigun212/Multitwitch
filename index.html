@@ -9,71 +9,110 @@
 </head>
 <body class="bg-gray-900 text-white min-h-screen p-4">
   <div class="max-w-6xl mx-auto">
-    <h1 class="text-3xl font-bold text-center mb-6">🎮 MultiTwitch Viewer</h1>
+    <h1 class="text-4xl font-extrabold text-center mb-8 text-purple-400 drop-shadow">
+      🎮 MultiTwitch Viewer
+    </h1>
 
-    <form id="streamForm" class="flex flex-col md:flex-row gap-4 mb-6 justify-center items-center">
+    <!-- Formulaire -->
+    <form id="streamForm" class="flex flex-col md:flex-row gap-4 mb-8 justify-center items-center">
       <input type="text" id="usernames" placeholder="streamer1, streamer2..."
-        class="w-full md:w-1/2 p-2 rounded bg-gray-800 border border-gray-600 text-white" required />
+        class="w-full md:w-1/2 p-3 rounded bg-gray-800 border border-gray-600 text-white"
+        required />
       <button type="submit"
-        class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-semibold transition">
-        Afficher les streams
+        class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded font-semibold transition shadow">
+        ➕ Ajouter les streams
       </button>
     </form>
 
+    <!-- Liste streamers actifs -->
+    <div id="activeUsers" class="flex flex-wrap gap-2 mb-4 justify-center"></div>
+
+    <!-- Lecteurs -->
     <div id="streamContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"></div>
 
-    <h2 class="text-2xl font-semibold mb-2">Chat</h2>
+    <!-- Chat -->
+    <h2 class="text-2xl font-semibold mb-2">💬 Chat actif</h2>
     <div id="chatContainer" class="w-full h-[500px] border-2 border-purple-500 rounded overflow-hidden"></div>
   </div>
 
   <script>
-    const streamForm = document.getElementById('streamForm');
-    const streamContainer = document.getElementById('streamContainer');
-    const chatContainer = document.getElementById('chatContainer');
+    const form = document.getElementById("streamForm");
+    const usernamesInput = document.getElementById("usernames");
+    const streamContainer = document.getElementById("streamContainer");
+    const chatContainer = document.getElementById("chatContainer");
+    const activeUsers = document.getElementById("activeUsers");
+    const domain = location.hostname;
 
-    const domain = location.hostname; // récupère le domaine GitHub Pages
+    let currentStreamers = [];
 
-    function clearEmbeds() {
-      streamContainer.innerHTML = '';
-      chatContainer.innerHTML = '';
+    function clear() {
+      streamContainer.innerHTML = "";
+      chatContainer.innerHTML = "";
+      activeUsers.innerHTML = "";
     }
 
     function createStreamEmbed(username) {
-      const div = document.createElement('div');
-      div.classList.add('w-full', 'h-[300px]');
+      const div = document.createElement("div");
+      div.className = "w-full h-[300px]";
       const id = `twitch-player-${username}`;
       div.id = id;
       streamContainer.appendChild(div);
 
       new Twitch.Embed(id, {
-        width: '100%',
+        width: "100%",
         height: 300,
         channel: username,
-        layout: 'video',
+        layout: "video",
         parent: [domain]
       });
+
+      const btn = document.createElement("button");
+      btn.textContent = username;
+      btn.className = "bg-gray-700 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition";
+      btn.onclick = () => loadChat(username);
+      activeUsers.appendChild(btn);
     }
 
-    function createChatEmbed(username) {
-      const iframe = document.createElement('iframe');
+    function loadChat(username) {
+      chatContainer.innerHTML = "";
+      const iframe = document.createElement("iframe");
       iframe.src = `https://www.twitch.tv/embed/${username}/chat?parent=${domain}`;
-      iframe.setAttribute('width', '100%');
-      iframe.setAttribute('height', '100%');
-      iframe.setAttribute('frameborder', '0');
+      iframe.width = "100%";
+      iframe.height = "100%";
+      iframe.setAttribute("frameborder", "0");
       chatContainer.appendChild(iframe);
     }
 
-    streamForm.addEventListener('submit', e => {
+    function saveToLocalStorage(streamers) {
+      localStorage.setItem("multiTwitchUsernames", JSON.stringify(streamers));
+    }
+
+    function loadFromLocalStorage() {
+      const stored = localStorage.getItem("multiTwitchUsernames");
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
-      clearEmbeds();
+      clear();
+      const usernames = usernamesInput.value
+        .split(",")
+        .map((u) => u.trim().toLowerCase())
+        .filter((u) => u.length > 0);
+      currentStreamers = usernames;
+      saveToLocalStorage(usernames);
+      usernames.forEach((username) => createStreamEmbed(username));
+      if (usernames.length > 0) loadChat(usernames[0]);
+    });
 
-      const usernames = document.getElementById('usernames').value
-        .split(',')
-        .map(u => u.trim().toLowerCase())
-        .filter(u => u.length > 0);
-
-      usernames.forEach(createStreamEmbed);
-      if (usernames.length) createChatEmbed(usernames[0]);
+    // Chargement initial
+    window.addEventListener("DOMContentLoaded", () => {
+      const saved = loadFromLocalStorage();
+      if (saved.length > 0) {
+        usernamesInput.value = saved.join(", ");
+        saved.forEach((username) => createStreamEmbed(username));
+        loadChat(saved[0]);
+      }
     });
   </script>
 </body>
